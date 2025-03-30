@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>百度地图搜索可视化</title>
+    <style>
+        #container {
+            width: 100%;
+            height: 100vh;
+            position: relative;
+        }
+        #mapContainer {
+            width: 100%;
+            height: 100%;
+        }
+        .search-box {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 999;
+            background: white;
+            padding: 10px;
+            border-radius: 5px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+        }
+        #input {
+            width: 300px;
+            padding: 8px;
+            font-size: 16px;
+            border: 1px solid #ddd;
+        }
+        #searchBtn {
+            padding: 8px 16px;
+            background: #3385ff;
+            color: white;
+            border: none;
+            cursor: pointer;
+            margin-left: 5px;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="container">
+        <div class="search-box">
+            <input type="text" id="input" placeholder="请输入地点（例如：北京天安门）">
+            <button id="searchBtn">搜索</button>
+            <button id="confirmArea" style="margin-left:10px;">提取区域路段</button>
+        </div>
+        <div id="mapContainer"></div>
+    </div>
+
+    <!-- 百度地图API -->
+    <script type="text/javascript" src="https://api.map.baidu.com/api?v=3.0&ak=qdGx1gtrXSNUigvgWvDa6rnws5PkqoCl"></script>
+    
+    <script>
+        // 初始化地图
+        let map = new BMap.Map("mapContainer");
+        let point = new BMap.Point(116.404, 39.915);
+        map.centerAndZoom(point, 11);
+        map.enableScrollWheelZoom(true);
+
+        // 添加控件
+        map.addControl(new BMap.NavigationControl());
+        map.addControl(new BMap.ScaleControl());
+        map.addControl(new BMap.OverviewMapControl());
+
+        // 搜索功能
+        document.getElementById('searchBtn').onclick = function() {
+            const keyword = document.getElementById('input').value;
+            let geocoder = new BMap.Geocoder();
+            geocoder.getPoint(keyword, function(point){
+                if (point) {
+                    map.clearOverlays();
+                    map.panTo(point);
+                    let marker = new BMap.Marker(point);
+                    map.addOverlay(marker);
+                    
+                    geocoder.getLocation(point, function(result){
+                        if (result) {
+                            const infoWindow = new BMap.InfoWindow(`
+                                <div style="padding:5px;min-width:200px;">
+                                    <h4>${result.address}</h4>
+                                    <p>坐标：${point.lng.toFixed(6)}, ${point.lat.toFixed(6)}</p>
+                                </div>
+                            `);
+                            infoWindow.open(map, point);
+                        }
+                    });
+                } else {
+                    alert("未找到相关位置");
+                }
+            }, "全国");
+        };
+
+        // 区域选择功能
+        let markers = [];
+        let polygon = null;
+        let roads = [];
+
+        function initAreaSelector() {
+            const bounds = map.getBounds();
+            const points = [
+                new BMap.Point(bounds.getSouthWest().lng, bounds.getNorthEast().lat),
+                new BMap.Point(bounds.getNorthEast().lng, bounds.getNorthEast().lat),
+                new BMap.Point(bounds.getNorthEast().lng, bounds.getSouthWest().lat),
+                new BMap.Point(bounds.getSouthWest().lng, bounds.getSouthWest().lat)
+            ];
+
+            points.forEach((point, index) => {
+                const marker = new BMap.Marker(point, {
+                    icon: new BMap.Icon('http://api.map.baidu.com/img/markers.png', 
+                                      new BMap.Size(23, 25), { imageOffset: new BMap.Size(-index * 23, 0) })
+                });
+                marker.enableDragging();
+                marker.addEventListener('dragend', updatePolygon);
+                map.addOverlay(marker);
+                markers.push(marker);
+            });
+            updatePolygon();
+        }
+
+        function updatePolygon() {
+            if (polygon) map.removeOverlay(polygon);
+            const points = markers.map(marker => marker.getPosition());
+            polygon = new BMap.Polygon(points, {
+                strokeColor: "#3385ff",
+                strokeWeight: 2,
+                fillColor: "#3385ff20"
+            });
+            map.addOverlay(polygon);
+        }
+
+        function extractRoads() {
+            if (!polygon) return;
+            const bounds = polygon.getBounds();
+            
+            const localSearch = new BMap.LocalSearch(map, {
+                renderOptions: { map: map, autoViewport: false },
+                onSearchComplete: results => {
+                    if (localSearch.getStatus() === BMAP_STATUS_SUCCESS) {
+                        roads = results.Kr.filter(item => 
+                            item.title.match(/路|街|道|巷|公路|高速公路/)
+                        );
+                        
+                        // 存储数据并打开新窗口
+                        localStorage.setItem('roadData', JSON.stringify(roads));
+                        window.open('road-map.html');
+                    }
+                }
+            });
+            
+            localSearch.searchInBounds("道路", bounds);
+        }
+
+        // 初始化
+        initAreaSelector();
+        document.getElementById('confirmArea').onclick = extractRoads;
+        // 在主页面代码中
+        window.open('road-map.html', '_blank');  // 强制新标签页打开
+    </script>
+</body>
+</html>
