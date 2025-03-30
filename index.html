@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>路段示意图</title>
+    <style>
+        #mapContainer {
+            width: 100vw;
+            height: 100vh;
+        }
+    </style>
+</head>
+<body>
+    <div id="mapContainer"></div>
+
+    <script type="text/javascript" src="https://api.map.baidu.com/api?v=3.0&ak=qdGx1gtrXSNUigvgWvDa6rnws5PkqoCl"></script>
+    
+    <script>
+        function initMap() {
+            const map = new BMap.Map("mapContainer");
+            const roads = JSON.parse(localStorage.getItem('roadData'));
+            
+            if (!roads || roads.length === 0) {
+                alert("未找到道路数据");
+                window.close();
+                return;
+            }
+
+            // 计算地图视野
+            const points = roads.map(r => new BMap.Point(r.point.lng, r.point.lat));
+            const bounds = new BMap.Bounds();
+            points.forEach(p => bounds.extend(p));
+
+            map.centerAndZoom(bounds.getCenter(), 13);
+            map.enableScrollWheelZoom(true);
+
+            // 绘制道路标记
+            roads.forEach(road => {
+                const point = new BMap.Point(road.point.lng, road.point.lat);
+                const marker = new BMap.Marker(point);
+                map.addOverlay(marker);
+                
+                marker.addEventListener("click", function() {
+                    const infoWindow = new BMap.InfoWindow(`
+                        <div style="min-width:200px">
+                            <h4>${road.title}</h4>
+                            <p>坐标：${road.point.lng.toFixed(4)}, ${road.point.lat.toFixed(4)}</p>
+                        </div>
+                    `);
+                    this.openInfoWindow(infoWindow);
+                });
+            });
+
+            map.setViewport(points);
+            localStorage.removeItem('roadData');
+        }
+
+        window.onload = initMap;
+    </script>
+</body>
+</html>
